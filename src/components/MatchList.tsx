@@ -15,7 +15,7 @@ function MatchCard({ match, isSelected, onClick, lang, theme }: { match: Match; 
        statusText = format(parseISO(match.date), 'HH:mm');
     } catch(e) {}
   }
-  if (isLive) statusText = (lang === 'ar' ? '🔴 مباشر ' : '🔴 LIVE ') + (match.matchTime || '');
+  if (isLive) statusText = (lang === 'ar' ? 'مباشر ' : 'LIVE ') + (match.matchTime || '');
   if (isFinished) statusText = lang === 'ar' ? 'انتهت المباراة' : 'Finished';
 
   return (
@@ -123,6 +123,18 @@ export default function MatchList({
 }) {
   const [internalLoading, setInternalLoading] = useState(false);
   const [activeFilter, setActiveFilter] = useState(filter);
+  const [serversData, setServersData] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch('/servers.json?t=' + new Date().getTime())
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.matches) {
+          setServersData(data.matches);
+        }
+      })
+      .catch(console.error);
+  }, []);
 
   const handleFilterClick = (f: string) => {
     if (f === activeFilter) return;
@@ -142,6 +154,32 @@ export default function MatchList({
     if (activeFilter === 'finished') return m.status === 'finished';
     return true;
   });
+
+  const normalizeStr = (str?: string) => {
+    if (!str) return '';
+    return str.toLowerCase().trim()
+      .replace(/[أإآا]/g, 'ا')
+      .replace(/[ةه]/g, 'ه')
+      .replace(/[^a-z0-9ا-ي]/g, '');
+  };
+
+  const hasServerStream = (match: Match) => {
+    return serversData.some((m: any) => {
+      const mHome = normalizeStr(m?.homeTeam);
+      const mAway = normalizeStr(m?.awayTeam);
+      const home = normalizeStr(match?.homeTeam?.name);
+      const away = normalizeStr(match?.awayTeam?.name);
+      
+      if (!mHome || !mAway || !home || !away) return false;
+      
+      const isHomeMatch = home.includes(mHome) || mHome.includes(home);
+      const isAwayMatch = away.includes(mAway) || mAway.includes(away);
+      const isHomeAwayCross = home.includes(mAway) || mAway.includes(home);
+      const isAwayHomeCross = away.includes(mHome) || mHome.includes(away);
+      
+      return (isHomeMatch && isAwayMatch) || (isHomeAwayCross && isAwayHomeCross);
+    });
+  };
 
   return (
     <div className="w-full flex flex-col h-full pt-4 px-4 pb-20">
@@ -182,7 +220,9 @@ export default function MatchList({
               </p>
            </div>
         ) : filteredMatches.length > 0 ? (
-          filteredMatches.map((match, index) => (
+          filteredMatches.map((match, index) => {
+            const hasStream = hasServerStream(match);
+            return (
             <Fragment key={match.id}>
               <MatchCard 
                 match={match} 
@@ -190,7 +230,7 @@ export default function MatchList({
                 lang={lang}
                 theme={theme}
                 onClick={() => {
-                  if (match.status === 'live') {
+                  if (match.status === 'live' || hasStream) {
                     onSelect(match);
                   } else if (match.status === 'upcoming') {
                     const matchDate = new Date(match.date);
@@ -203,7 +243,7 @@ export default function MatchList({
                 }}
               />
             </Fragment>
-          ))
+          )})
         ) : (
           <div className="flex flex-col items-center justify-center h-40 text-white/70 gap-4 mt-10">
             <div className="w-24 h-24 rounded-full bg-white/5 flex items-center justify-center shadow-inner p-2 border border-white/10">
@@ -224,3 +264,4 @@ export default function MatchList({
     </div>
   );
 }
+
