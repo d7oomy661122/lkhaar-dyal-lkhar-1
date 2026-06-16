@@ -28,10 +28,10 @@ export default function ServerDialog({
       .then(data => {
          const normalizeStr = (str?: string) => {
            if (!str) return '';
-           return str.toLowerCase().trim()
+           return str.toLowerCase()
              .replace(/[أإآا]/g, 'ا')
              .replace(/[ةه]/g, 'ه')
-             .replace(/[^a-z0-9ا-ي]/g, '');
+             .replace(/\s+/g, '');
          };
 
          const matchData = data.matches?.find((m: any) => {
