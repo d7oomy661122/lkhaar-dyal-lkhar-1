@@ -157,28 +157,55 @@ export default function MatchList({
 
   const normalizeStr = (str?: string) => {
     if (!str) return '';
-    return str.toLowerCase().trim()
+    return str.toLowerCase()
       .replace(/[أإآا]/g, 'ا')
       .replace(/[ةه]/g, 'ه')
-      .replace(/[^a-z0-9ا-ي]/g, '');
+      .replace(/\s+/g, '');
   };
 
-  const hasServerStream = (match: Match) => {
-    return serversData.some((m: any) => {
-      const mHome = normalizeStr(m?.homeTeam);
-      const mAway = normalizeStr(m?.awayTeam);
-      const home = normalizeStr(match?.homeTeam?.name);
-      const away = normalizeStr(match?.awayTeam?.name);
+  const checkHasStreamAndSelect = async (match: Match) => {
+    if (match.status === 'live') {
+      onSelect(match);
+      return;
+    }
+
+    try {
+      const res = await fetch('/servers.json?t=' + new Date().getTime());
+      const data = await res.json();
+      const sData = data.matches || [];
       
-      if (!mHome || !mAway || !home || !away) return false;
-      
-      const isHomeMatch = home.includes(mHome) || mHome.includes(home);
-      const isAwayMatch = away.includes(mAway) || mAway.includes(away);
-      const isHomeAwayCross = home.includes(mAway) || mAway.includes(home);
-      const isAwayHomeCross = away.includes(mHome) || mHome.includes(away);
-      
-      return (isHomeMatch && isAwayMatch) || (isHomeAwayCross && isAwayHomeCross);
-    });
+      const hasStreamInJson = sData.some((m: any) => {
+        const mHome = normalizeStr(m?.homeTeam);
+        const mAway = normalizeStr(m?.awayTeam);
+        const home = normalizeStr(match?.homeTeam?.name);
+        const away = normalizeStr(match?.awayTeam?.name);
+        
+        if (!mHome || !mAway || !home || !away) return false;
+        
+        const isHomeMatch = home.includes(mHome) || mHome.includes(home);
+        const isAwayMatch = away.includes(mAway) || mAway.includes(away);
+        const isHomeAwayCross = home.includes(mAway) || mAway.includes(home);
+        const isAwayHomeCross = away.includes(mHome) || mHome.includes(away);
+        
+        return (isHomeMatch && isAwayMatch) || (isHomeAwayCross && isAwayHomeCross);
+      });
+
+      if (hasStreamInJson) {
+        onSelect(match);
+        return;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+
+    if (match.status === 'upcoming') {
+      const matchDate = new Date(match.date);
+      const now = new Date();
+      const diffHours = (matchDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+      if (diffHours <= 3 || isNaN(diffHours)) {
+        onSelect(match);
+      }
+    }
   };
 
   return (
@@ -221,7 +248,6 @@ export default function MatchList({
            </div>
         ) : filteredMatches.length > 0 ? (
           filteredMatches.map((match, index) => {
-            const hasStream = hasServerStream(match);
             return (
             <Fragment key={match.id}>
               <MatchCard 
@@ -229,18 +255,7 @@ export default function MatchList({
                 isSelected={selectedMatch === match.id}
                 lang={lang}
                 theme={theme}
-                onClick={() => {
-                  if (match.status === 'live' || hasStream) {
-                    onSelect(match);
-                  } else if (match.status === 'upcoming') {
-                    const matchDate = new Date(match.date);
-                    const now = new Date();
-                    const diffHours = (matchDate.getTime() - now.getTime()) / (1000 * 60 * 60);
-                    if (diffHours <= 3 || isNaN(diffHours)) {
-                      onSelect(match);
-                    }
-                  }
-                }}
+                onClick={() => checkHasStreamAndSelect(match)}
               />
             </Fragment>
           )})
